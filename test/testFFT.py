@@ -167,26 +167,27 @@ class TestFFT(unittest.TestCase):
         x = np.random.random((1, n)).astype(np.csingle) + 1j * np.random.random((1, n)).astype(np.csingle)
 
         # Write the inputs to the memory
-        # for b in range(beta):
-        #     sim.memory[x_addrs[b]] = representation.signedComplexFloatToBinary(x)[:, 2 * b::2 * beta]
-        #     sim.memory[y_addrs[b]] = representation.signedComplexFloatToBinary(x)[:, 2 * b + 1::2 * beta]
+        for b in range(beta):
+            sim.memory[x_addrs[b]] = representation.signedComplexFloatToBinary(x)[:, 2 * b::2 * beta]
+            sim.memory[y_addrs[b]] = representation.signedComplexFloatToBinary(x)[:, 2 * b + 1::2 * beta]
 
         # Perform the 2rbeta-FFT algorithm
         fft.FFT.perform2RBetaFFT(sim, x_addrs, y_addrs, inter_addr, dtype=dtype)
 
         # Read the outputs from the memory
         X = np.zeros((1, n), dtype=np.csingle)
-        # for b in range(beta):
-        #     X[:, 2 * b::2 * beta] =\
-        #         representation.binaryToSignedComplexFloat(sim.memory[x_addrs[b]]).astype(np.csingle)
-        #     X[:, 2 * b + 1::2 * beta] = \
-        #         representation.binaryToSignedComplexFloat(sim.memory[y_addrs[b]]).astype(np.csingle)
+        for b in range(beta):
+            X[:, 2 * b::2 * beta] =\
+                representation.binaryToSignedComplexFloat(sim.memory[x_addrs[b]]).astype(np.csingle)
+            X[:, 2 * b + 1::2 * beta] = \
+                representation.binaryToSignedComplexFloat(sim.memory[y_addrs[b]]).astype(np.csingle)
 
         # Verify correctness
         np.seterr(over='ignore')
 
         expected = np.fft.fft(x).astype(np.csingle)
-        # self.assertTrue((np.isclose(X, expected, rtol=1e-3, atol=1e-3).all()))
+        print('Expected:', expected, 'Got:', X)
+        self.assertTrue((np.isclose(X, expected, rtol=1e-3, atol=1e-3).all()))
 
         print(f'Complex {N}-bit {n}-element 2rbeta-FFT with {sim.latency} cycles and {sim.energy} energy.')
 

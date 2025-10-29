@@ -49,9 +49,8 @@ class FFT:
         n = sim.num_rows
 
         # Pre-compute the constants
-        # w = np.exp((2j if inv else -2j) * np.pi / n * np.arange(n)).astype(dtype.np_dtype).reshape(1, n)
-        # w_bin = representation.signedComplexFloatToBinary(w)
-        w_bin = np.zeros((N, n), dtype=np.bool)
+        w = np.exp((2j if inv else -2j) * np.pi / n * np.arange(n)).astype(dtype.np_dtype).reshape(1, n)
+        w_bin = representation.signedComplexFloatToBinary(w)
 
         # Allocate the address for the pair column
         y_addr = inter[:N]
@@ -133,9 +132,8 @@ class FFT:
         n = 2 * sim.num_rows
 
         # Pre-compute the constants
-        # w = np.exp((2j if inv else -2j) * np.pi / n * np.arange(n)).astype(dtype.np_dtype).reshape(1, n)
-        # w_bin = representation.signedComplexFloatToBinary(w)
-        w_bin = np.zeros((N, n), dtype=np.bool)
+        w = np.exp((2j if inv else -2j) * np.pi / n * np.arange(n)).astype(dtype.np_dtype).reshape(1, n)
+        w_bin = representation.signedComplexFloatToBinary(w)
 
         # Allocate the address for the constants
         w_addr = inter[:N]
@@ -201,9 +199,8 @@ class FFT:
         n = 2 * sim.num_rows * beta
 
         # Pre-compute the constants
-        # w = np.exp((2j if inv else -2j) * np.pi / n * np.arange(n)).astype(dtype.np_dtype).reshape(1, n)
-        # w_bin = representation.signedComplexFloatToBinary(w)
-        w_bin = np.zeros((N, n), dtype=np.bool)
+        w = np.exp((2j if inv else -2j) * np.pi / n * np.arange(n)).astype(dtype.np_dtype).reshape(1, n)
+        w_bin = representation.signedComplexFloatToBinary(w)
 
         # Allocate the address for the constants
         w_addr = inter[:N]

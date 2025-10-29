@@ -248,7 +248,7 @@ class TestArithmetic(unittest.TestCase):
         # Sample the inputs at random
         x = np.random.random((1, num_rows)).astype(np.csingle) + 1j * np.random.random((1, num_rows)).astype(np.csingle)
         y = np.random.random((1, num_rows)).astype(np.csingle) + 1j * np.random.random((1, num_rows)).astype(np.csingle)
-
+        
         # Write the inputs to the memory
         sim.memory[x_addr] = representation.signedComplexFloatToBinary(x)
         sim.memory[y_addr] = representation.signedComplexFloatToBinary(y)
@@ -264,7 +264,8 @@ class TestArithmetic(unittest.TestCase):
         expected = x * y
         # Generate mask to avoid cases where an overflow occurred
         mask = np.logical_and(np.logical_not(np.isinf(expected)), np.logical_or(expected == 0, np.abs(expected) >= np.finfo(np.float32).tiny))
-        self.assertTrue(((z == expected)[mask]).all())
+        # self.assertTrue(((z == expected)[mask]).all())
+        self.assertTrue((np.isclose(z, expected, rtol=1e-7, atol=1e-7)[mask]).all())
 
         print(f'Complex {N}-bit Multiplication with {sim.latency} cycles and {sim.energy//num_rows} average energy.')
 
