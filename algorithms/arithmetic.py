@@ -2,6 +2,7 @@ import numpy as np
 from math import log2, ceil
 from enum import Enum
 from simulator import simulator
+from simulator.simulator import GateType
 from util import representation
 
 
@@ -70,14 +71,15 @@ class RealArithmetic:
         """
         Represents a type of real data
         """
-        IEEE_FLOAT16 = (1, 5, 10, np.float16)
-        IEEE_FLOAT32 = (1, 8, 23, np.float32)
+        IEEE_FLOAT16 = (1, 5, 10, np.float16, 15)
+        IEEE_FLOAT32 = (1, 8, 23, np.float32, 127)
 
-        def __init__(self, Ns, Ne, Nm, np_dtype):
+        def __init__(self, Ns, Ne, Nm, np_dtype, bias):
             self.Ns = Ns
             self.Ne = Ne
             self.Nm = Nm
             self.N = Ns + Ne + Nm
+            self.bias = bias
             self.np_dtype = np_dtype
 
     @staticmethod
@@ -166,7 +168,141 @@ class RealArithmetic:
             z_addr[:dtype.Ns], z_addr[dtype.Ns:dtype.Ns+dtype.Ne], z_addr[dtype.Ns+dtype.Ne:], inter)
 
     @staticmethod
+    def dot(sim: simulator.SerialSimulator,
+            x_addr: np.ndarray, y_addr: np.ndarray, z_addr: np.ndarray, inter, elements, dtype=DataType.IEEE_FLOAT32):
+        """
+        Performs a dot product on the given columns.
+        :param sim: the simulation environment
+        :param x_addr: the addresses of input x
+        :param y_addr: the addresses of input y
+        :param z_addr: the addresses of output z
+        :param inter: addresses for inter. Either np array or IntermediateAllocator.
+        :param elements: number of items in the vector.
+        :param dtype: the type of numbers
+        """
+        if isinstance(inter, np.ndarray):
+            inter = IntermediateAllocator(inter)
+
+        RealArithmetic.mult(sim, x_addr, y_addr, z_addr, inter, dtype)
+
+        prev_size = elements
+        current_size = -(prev_size // -2)
+
+        a_loc = inter.malloc(dtype.N)
+        b_loc = inter.malloc(dtype.N)
+        for k in range(ceil(log2(elements))):
+            half_a = np.array([sim.read(i, z_addr) for i in range(current_size)])
+            half_b = np.array([sim.read(i + current_size, z_addr) for i in range(prev_size - current_size)])
+
+
+
+            sim.perform(GateType.INIT0, [], a_loc)
+            sim.perform(GateType.INIT0, [], b_loc)
+            sim.perform(GateType.INIT0, [], z_addr)
+
+            for i in range(current_size):
+                sim.write(i, a_loc, half_a[i])
+
+            for i in range(prev_size - current_size):
+                sim.write(i, b_loc, half_b[i])
+
+            if current_size > prev_size - current_size:
+                result_size = prev_size - current_size
+                RealArithmetic.add(sim, a_loc, b_loc, z_addr, inter, dtype)
+
+                for i in range(result_size, current_size):
+                    sim.write(i, z_addr, half_a[i])
+
+                prev_size = current_size
+            else:
+                RealArithmetic.add(sim, a_loc, b_loc, z_addr, inter, dtype)
+                prev_size = max(current_size, prev_size - current_size)
+
+            current_size = -(prev_size // -2)
+
+        inter.free(a_loc)
+        inter.free(b_loc)
+
+    @staticmethod
+    def batch_dot(sim: simulator.SerialSimulator,
+            x_addr: np.ndarray, y_addr: np.ndarray, z_addr: np.ndarray, inter, elements, batch_size, dtype=DataType.IEEE_FLOAT32):
+        """
+        Performs a dot product on the given columns.
+        :param sim: the simulation environment
+        :param x_addr: the addresses of input x
+        :param y_addr: the addresses of input y
+        :param z_addr: the addresses of output z
+        :param inter: addresses for inter. Either np array or IntermediateAllocator.
+        :param elements: number of items in each vector.
+        :param batch_size: number of vectors in the supervector.
+        :param dtype: the type of numbers
+        """
+        if isinstance(inter, np.ndarray):
+            inter = IntermediateAllocator(inter)
+
+        RealArithmetic.mult(sim, x_addr, y_addr, z_addr, inter, dtype)
+
+        prev_size = elements
+        current_size = -(prev_size // -2)
+
+        a_loc = inter.malloc(dtype.N)
+        b_loc = inter.malloc(dtype.N)
+
+        half_a = [None] * batch_size
+        half_b = [None] * batch_size
+        for k in range(ceil(log2(elements))):
+            for j in range(batch_size):
+                batch_offset = j * elements
+                half_a[j] = np.array([sim.read(i + batch_offset, z_addr) for i in range(current_size)])
+                half_b[j] = np.array([sim.read(i + current_size + batch_offset, z_addr) for i in range(prev_size - current_size)])
+
+            sim.perform(GateType.INIT0, [], a_loc)
+            sim.perform(GateType.INIT0, [], b_loc)
+            sim.perform(GateType.INIT0, [], z_addr)
+
+            for j in range(batch_size):
+                batch_offset = j * elements
+                for i in range(current_size):
+                    sim.write(i + batch_offset, a_loc, half_a[j][i])
+
+                for i in range(prev_size - current_size):
+                    sim.write(i + batch_offset, b_loc, half_b[j][i])
+
+            if current_size > prev_size - current_size:
+                result_size = prev_size - current_size
+                RealArithmetic.add(sim, a_loc, b_loc, z_addr, inter, dtype)
+
+                for j in range(batch_size):
+                    batch_offset = j * elements
+                    for i in range(result_size, current_size):
+                        sim.write(i + batch_offset, z_addr, half_a[i])
+
+                prev_size = current_size
+            else:
+                RealArithmetic.add(sim, a_loc, b_loc, z_addr, inter, dtype)
+                prev_size = max(current_size, prev_size - current_size)
+
+            current_size = -(prev_size // -2)
+
+        inter.free(a_loc)
+        inter.free(b_loc)
+
+    @staticmethod
     def copy(sim: simulator.SerialSimulator,
+            x_addr: np.ndarray, z_addr: np.ndarray, inter, dtype=DataType.IEEE_FLOAT32):
+        """
+        Copies the data from x_addr to z_addr
+        :param sim: the simulation environment
+        :param x_addr: the addresses of input x
+        :param z_addr: the addresses of output z
+        :param inter: addresses for inter. Either np array or IntermediateAllocator.
+        :param dtype: the type of numbers
+        """
+        for i in range(dtype.N):
+            RealArithmetic.__id(sim, x_addr[i], z_addr[i], inter)
+
+    @staticmethod
+    def unzip(sim: simulator.SerialSimulator,
             x_addr: np.ndarray, z_addr: np.ndarray, inter, dtype=DataType.IEEE_FLOAT32):
         """
         Copies the data from x_addr to z_addr
@@ -215,6 +351,75 @@ class RealArithmetic:
             sim.perform(simulator.GateType.NOT, [ze], [x])
 
         inter.free(ze)
+
+    @staticmethod
+    def approxReciprocalSqrt(sim: simulator.SerialSimulator, x_addr: np.ndarray,
+                             inter, dtype=DataType.IEEE_FLOAT32):
+        """
+        Approximate 1/sqrt(x) using the 'magic number' trick.
+        No Newton-Raphson refinement is applied.
+        Suitable for rough estimates where accuracy is not important.
+        """
+
+        if dtype.np_dtype != np.float32:
+            raise NotImplementedError("Only float32 supported")
+
+        if isinstance(inter, np.ndarray):
+            inter = IntermediateAllocator(inter)
+
+        N = len(x_addr)
+        magic = 0x5f3759df  # Quake III magic constant
+
+        # Step 1: reinterpret x as int (simulate via your memory array)
+        xi = inter.malloc(N)
+        # copy x_addr bits into xi
+        for i in range(N):
+            RealArithmetic.__id(sim, x_addr[i], xi[i], inter)
+
+        # Step 2: shift right by 1 (divide exponent by 2)
+        half_xi = inter.malloc(N)
+        one = inter.malloc(N)
+        one = sim.perform(GateType.INIT1, [], [one])
+        RealArithmetic.__variableShift(sim, x_addr, one, inter)
+
+        # Step 3: subtract from magic number: xi = magic - (xi >> 1)
+        magic_addr = inter.malloc(N)
+        # initialize magic constant in simulator memory
+        for i in range(N):
+            bit_val = (magic >> (N - 1 - i)) & 1
+            if bit_val:
+                sim.perform(GateType.INIT1, [], [magic_addr[i]])
+            else:
+                sim.perform(GateType.INIT0, [], [magic_addr[i]])
+
+        RealArithmetic.sub(sim, magic_addr, half_xi, xi, inter)
+
+        # Step 4: copy result back to x_addr
+        for i in range(N):
+            RealArithmetic.__id(sim, xi[i], x_addr[i], inter)
+
+        # Clean up temporaries
+        inter.free(xi)
+        inter.free(half_xi)
+        inter.free(magic_addr)
+
+        def fast_inv_sqrt(x):
+            """
+            Fast approximation of 1/sqrt(x) using the exponent trick
+
+            :param x: float or numpy array of floats
+            :return: approximate 1/sqrt(x)
+            """
+            x = np.asarray(x, dtype=np.float32)
+            if np.any(x <= 0):
+                raise ValueError("Input must be positive")
+
+            xi = x.view(np.int32)
+            magic = 0x5f3759df
+            y = magic - (xi >> 1)
+            y = y.view(np.float32)
+
+            return y
 
     @staticmethod
     def __fixedAddition(sim: simulator.SerialSimulator, x_addr: np.ndarray, y_addr: np.ndarray, z_addr: np.ndarray,
@@ -887,6 +1092,65 @@ class RealArithmetic:
             inter.free(notz_addr)
         if custom_one_addr:
             inter.free(one_bit_addr)
+
+    @staticmethod
+    def __and(sim: simulator.SerialSimulator, a_addr: int, b_addr: int, z_addr: int, inter,
+              nota_addr=None, notb_addr=None, notz_addr=None, one_bit_addr=None):
+        """
+        Performs z = AND(a, b)
+        :param sim: the simulation environment
+        :param a_addr: input a
+        :param b_addr: input b
+        :param z_addr: output z
+        :param inter: intermediate allocator or np array
+        :param nota_addr: optional column = NOT(a)
+        :param notb_addr: optional column = NOT(b)
+        :param notz_addr: optional column = NOT(z)
+        :param one_bit_addr: optional constant 1 column
+        """
+
+        if isinstance(inter, np.ndarray):
+            inter = IntermediateAllocator(inter)
+
+        # Make NOT(a) if not supplied
+        custom_nota = nota_addr is None
+        if custom_nota:
+            nota_addr = inter.malloc(1)
+            sim.perform(simulator.GateType.NOT, [a_addr], [nota_addr])
+
+        # Make NOT(b) if not supplied
+        custom_notb = notb_addr is None
+        if custom_notb:
+            notb_addr = inter.malloc(1)
+            sim.perform(simulator.GateType.NOT, [b_addr], [notb_addr])
+
+        # constant 1
+        custom_one = one_bit_addr is None
+        if custom_one:
+            one_bit_addr = inter.malloc(1)
+            sim.perform(simulator.GateType.INIT1, [], [one_bit_addr])
+
+        # NOT(z) = (NOT a) NOR (NOT b)
+        custom_notz = notz_addr is None
+        if custom_notz:
+            notz_addr = inter.malloc(1)
+
+        sim.perform(simulator.GateType.INIT1, [], [notz_addr])
+        sim.perform(simulator.GateType.MIN3, [nota_addr, notb_addr, one_bit_addr], [notz_addr])
+
+        # z = NOT(NOT(z))
+        sim.perform(simulator.GateType.INIT1, [], [z_addr])
+        sim.perform(simulator.GateType.NOT, [notz_addr], [z_addr])
+
+        # free temps
+        if custom_notz:
+            inter.free(notz_addr)
+        if custom_one:
+            inter.free(one_bit_addr)
+        if custom_nota:
+            inter.free(nota_addr)
+        if custom_notb:
+            inter.free(notb_addr)
 
     @staticmethod
     def __xor(sim: simulator.SerialSimulator, a_addr: int, b_addr: int, z_addr: int, inter,
