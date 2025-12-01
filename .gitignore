@@ -7,3 +7,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+gpu/complex_poly
+gpu/fft
+gpu/real_poly

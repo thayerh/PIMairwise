@@ -27,6 +27,7 @@ def runTest(file, vectorSize, batchSize, numIterations):
         # Check if program finished
         if p.poll(1):
             stop = process.stdout.readline().decode('ascii')
+            print(str(stop))
             assert(str(stop) == "STOP\n")
             break
 
@@ -44,22 +45,23 @@ def runTests(file, vectorSizes, batchSizes, numIterations):
 
 def runAllTests():
 
-    # Compile for full-precision
-    os.system('make -s DTYPE=full')
-    # Run full-precision tests
-    print('Full Precision:')
-    runTests('fft', [1024, 2048, 4096, 8192], [500000, 250000, 125000, 62500], 1024)
-    runTests('complex_poly', [1024, 2048, 4096], [330000, 165000, 82500], 1024)
-    runTests('real_poly', [1024, 2048, 4096, 8192], [285000, 142500, 71250, 35625], 1024)
-    print()
+    # # Compile for full-precision
+    # os.system('make -s DTYPE=full')
+    # # Run full-precision tests
+    # print('Full Precision:')
+    # runTests('fft', [1024, 2048, 4096, 8192], [500000, 250000, 125000, 62500], 1024)
+    # runTests('complex_poly', [1024, 2048, 4096], [330000, 165000, 82500], 1024)
+    # runTests('real_poly', [1024, 2048, 4096, 8192], [285000, 142500, 71250, 35625], 1024)
+    # print()
 
-    # Compile for half-precision
+    # # Compile for half-precision
     os.system('make -s DTYPE=half')
-    # Run half-precision tests
-    print('Half Precision:')
-    runTests('fft', [1024, 2048, 4096, 8192, 16384], [650000, 325000, 162500, 81250, 40625], 1024)
-    runTests('complex_poly', [1024, 2048, 4096, 8192], [500000, 250000, 125000, 62500], 1024)
-    runTests('real_poly', [1024, 2048, 4096, 8192, 16384], [400000, 200000, 100000, 50000, 25000], 1024)
+    # # Run half-precision tests
+    # print('Half Precision:')
+    # runTests('fft', [1024, 2048, 4096, 8192, 16384], [650000, 325000, 162500, 81250, 40625], 1024)
+    # runTests('complex_poly', [1024, 2048, 4096, 8192], [500000, 250000, 125000, 62500], 1024)
+    # runTests('real_poly', [1024, 2048, 4096, 8192, 16384], [400000, 200000, 100000, 50000, 25000], 1024)
+    runTests('real_poly', [16384], [25000], 1024)
 
 
 if __name__ == '__main__':

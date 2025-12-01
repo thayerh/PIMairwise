@@ -47,9 +47,16 @@ void runTest(long long vectorSize, long long batchSize, long long numIterations)
 
     // Create FFT plan
     cufftHandle plan;
+    #ifdef HALF_PRECISION
+    // For half precision, we need to use the Xt API if available
     checkCudaErrors(cufftCreate(&plan));
     size_t ws = 0;
-    checkCudaErrors(cufftXtMakePlanMany(plan, 1, &vectorSize, NULL, 1, 1, DTYPE, NULL, 1, 1, DTYPE, batchSize, &ws, DTYPE));
+    long long n[1] = {vectorSize};
+    checkCudaErrors(cufftXtMakePlanMany(plan, 1, n, NULL, 1, 1, DTYPE, NULL, 1, 1, DTYPE, batchSize, &ws, DTYPE));
+    #else
+    // For full precision, use standard batch API
+    checkCudaErrors(cufftPlan1d(&plan, vectorSize, CUFFT_C2C, batchSize));
+    #endif
 
     // Copy to device
     checkCudaErrors(cudaMemcpy(d_data, h_data, vectorSize * batchSize * sizeof(Complex), cudaMemcpyHostToDevice));
@@ -60,7 +67,11 @@ void runTest(long long vectorSize, long long batchSize, long long numIterations)
     std::cout << "START" << std::endl;
 
     for (int i = 0; i < numIterations; i++) {
+        #ifdef HALF_PRECISION
         checkCudaErrors(cufftXtExec(plan, (void *) d_data, (void *) d_data, CUFFT_FORWARD));
+        #else
+        checkCudaErrors(cufftExecC2C(plan, (cufftComplex*) d_data, (cufftComplex*) d_data, CUFFT_FORWARD));
+        #endif
     }
 
     checkCudaErrors(cudaEventRecord(stop, 0));
