@@ -107,3 +107,13 @@ class SerialSimulator:
         self.memory[cols, row] = data
         self.latency += 1
         self.energy += len(cols)
+
+    def read(self, row, cols):
+        """
+        Performs a read operation at the given row and columns.
+        :param row: the row address
+        :param cols: the columns to read from
+        """
+        self.latency += 1
+        self.energy += len(cols)
+        return self.memory[cols, row]
